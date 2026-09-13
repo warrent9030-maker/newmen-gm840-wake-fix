@@ -1,0 +1,15 @@
+# Owner firmware and diagnostics remain local.
+backups/
+build/
+dist/
+*.bin
+*.hex
+*.etl
+*.jsonl
+*.log
+*.zip
+__pycache__/
+*.pyc
+.venv/
+.env*
+.DS_Store
