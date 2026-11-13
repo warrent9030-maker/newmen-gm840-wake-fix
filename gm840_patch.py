@@ -144,7 +144,7 @@ def main(argv=None):
         elif args.command == 'extract-restore':
             write_new(args.output, backup[:APP_SIZE])
         elif args.command == 'verify':
-            info = verify_readback(backup, args.application.read_bytes(), args.readback.read_bytes())
+            info.update(verify_readback(backup, args.application.read_bytes(), args.readback.read_bytes()))
         print(json.dumps(info, indent=2))
         return 0
     except (OSError, ValueError) as error:
