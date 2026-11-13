@@ -29,21 +29,36 @@ $secondBackupPath = Join-Path $sessionDirectory 'before-full-verify.bin'
 $restorePath = Join-Path $sessionDirectory 'restore-application.bin'
 $patchedPath = Join-Path $sessionDirectory ('patched-' + $Feature + '.bin')
 $readbackPath = Join-Path $sessionDirectory 'installed-full-readback.bin'
+$logPath = Join-Path $sessionDirectory 'install.log'
 $deviceOptions = @('--platform','sh68f90','--vendor_id','0x12c9','--product_id','0x6004',
     '--firmware_size','61440','--bootloader_size','4096','--page_size','2048',
-    '--isp_iface_num','1','--isp_report_id','5','--reboot','true','--format','bin','--retry','2')
+    '--isp_iface_num','1','--isp_report_id','5','--format','bin','--retry','2')
+# Backup reads keep the keyboard in ISP mode; only the write and final readback reboot it.
+$readOptions = $deviceOptions + @('--reboot','false')
+$flashOptions = $deviceOptions + @('--reboot','true')
+function Write-Transcript([scriptblock]$Call) {
+    # Redirected native stderr becomes error records in Windows PowerShell 5.1;
+    # Continue for the call so tool output reaches the transcript and console.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Call 2>&1 | Tee-Object -FilePath $logPath -Append
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
 function Invoke-Flasher([string[]]$ToolArguments) {
-    & $flasherPath @ToolArguments
+    Write-Transcript { & $flasherPath @ToolArguments }
     if ($LASTEXITCODE -ne 0) { throw "sinowisp failed ($LASTEXITCODE). No further operation will run." }
 }
 function Invoke-Patcher([string[]]$ToolArguments) {
-    & $pythonPath $patcherPath @ToolArguments
+    Write-Transcript { & $pythonPath $patcherPath @ToolArguments }
     if ($LASTEXITCODE -ne 0) { throw 'Firmware validation failed or the patcher could not run. See the error above. No further operation will run.' }
 }
 Write-Host 'Use a GM840 in wired mode (Fn+Tab held for 3 seconds, red Tab indicator). Keep USB connected.'
-Invoke-Flasher (@('read') + $deviceOptions + @('--section','full',$backupPath))
-Invoke-Flasher (@('read') + $deviceOptions + @('--section','full',$secondBackupPath))
-if ((Get-FileHash -LiteralPath $backupPath).Hash -ne (Get-FileHash -LiteralPath $secondBackupPath).Hash) {
+Invoke-Flasher (@('read') + $readOptions + @('--section','full',$backupPath))
+Invoke-Flasher (@('read') + $readOptions + @('--section','full',$secondBackupPath))
+if ((Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $secondBackupPath -Algorithm SHA256).Hash) {
     throw 'The two backups differ. Both are retained; nothing will be flashed.'
 }
 Invoke-Patcher -ToolArguments @('inspect',$backupPath)
@@ -54,7 +69,7 @@ if (-not $Flash) {
     Write-Host 'Preparation complete. Firmware has not been flashed. Run with -Flash when ready to install.'
     return
 }
-Invoke-Flasher (@('write') + $deviceOptions + @($patchedPath))
-Invoke-Flasher (@('read') + $deviceOptions + @('--section','full',$readbackPath))
+Invoke-Flasher (@('write') + $flashOptions + @($patchedPath))
+Invoke-Flasher (@('read') + $flashOptions + @('--section','full',$readbackPath))
 Invoke-Patcher -ToolArguments @('verify',$backupPath,$patchedPath,$readbackPath)
 Write-Host 'Installation and exact readback verified. Test normal wired typing, then Bluetooth idle/wake.'

@@ -92,8 +92,9 @@ downloaded script with `Unblock-File .\install.ps1`. Do not change a managed
 computer's policy to get around an administrator restriction. The
 [manual instructions](docs/manual-install.md) use the same operations directly.
 
-Every run creates a separate `backups\<timestamp>\` directory. **Keep it private
-and save a copy elsewhere.** With `-Flash`, the helper writes only the application,
+Every run creates a separate `backups\<timestamp>\` directory containing
+`install.log`, a transcript of the flasher and patcher output — include it when
+reporting an issue. **Keep it private and save a copy elsewhere.** With `-Flash`, the helper writes only the application,
 then performs an independent full readback and requires an exact application
 match and an unchanged bootloader. There is no force option or automatic retry
 after a validation failure. Reading via sinowisp uses its USB-normalized reset

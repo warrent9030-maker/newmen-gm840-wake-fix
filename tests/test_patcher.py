@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -137,6 +138,27 @@ class PatcherTests(unittest.TestCase):
                     self.assertEqual(out, '')
                     self.assertIn('ERROR', err)
             self.assertFalse(output.exists())
+
+    def test_installer_options_match_patcher_and_readme(self):
+        # Drift guard: the Windows helper's device parameters must agree with
+        # the patcher constants and the README compatibility table.
+        repo = Path(__file__).resolve().parent.parent
+        script = (repo / 'install.ps1').read_text(encoding='utf-8')
+        readme = (repo / 'README.md').read_text(encoding='utf-8')
+        match = re.search(r"\$deviceOptions\s*=\s*@\((.*?)\)", script, re.S)
+        self.assertIsNotNone(match)
+        options = [token.strip(" \t\r\n'\"") for token in match.group(1).split(',')]
+        expected = ['--platform', 'sh68f90', '--vendor_id', '0x12c9', '--product_id', '0x6004',
+                    '--firmware_size', str(fw.APP_SIZE), '--bootloader_size', str(fw.FULL_SIZE - fw.APP_SIZE),
+                    '--page_size', '2048', '--isp_iface_num', '1', '--isp_report_id', '5',
+                    '--format', 'bin', '--retry', '2']
+        self.assertEqual(options, expected)
+        # Only the write and the post-install readback reboot the device.
+        self.assertEqual(script.count("$readOptions + @('--section','full'"), 2)
+        self.assertIn("@('write') + $flashOptions", script)
+        self.assertIn("@('read') + $flashOptions + @('--section','full',$readbackPath)", script)
+        for token in ('12c9:6004', '61,440', '4,096', '1 / 5', '2,048'):
+            self.assertIn(token, readme)
 
     def test_overlay_assembles_to_reviewed_payload(self):
         self.assertEqual(assemble(), fw.BATTERY_CODE)

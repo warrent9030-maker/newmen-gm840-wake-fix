@@ -8,7 +8,7 @@ Do not use these parameters on an unrelated device.
 $flasher = 'C:\Tools\sinowisp.exe'
 $device = @('--platform','sh68f90','--vendor_id','0x12c9','--product_id','0x6004',
   '--firmware_size','61440','--bootloader_size','4096','--page_size','2048',
-  '--isp_iface_num','1','--isp_report_id','5','--reboot','true','--format','bin','--retry','2')
+  '--isp_iface_num','1','--isp_report_id','5','--format','bin','--retry','2')
 ```
 
 Connect USB, then hold Fn+Tab for three seconds to select wired mode (red Tab
@@ -18,13 +18,15 @@ Do not reuse a backup filename: the upstream flasher can overwrite files.
 ## Back up before changing anything
 
 ```powershell
-& $flasher read @device --section full before-full.bin
+& $flasher read @device --reboot false --section full before-full.bin
 # Stop if the command failed.
-& $flasher read @device --section full before-full-verify.bin
+& $flasher read @device --reboot false --section full before-full-verify.bin
 Get-FileHash before-full.bin, before-full-verify.bin -Algorithm SHA256
 ```
 
-Both hashes must match. Retain both files. Pass the full backup to the patcher,
+Both hashes must match. Retain both files. Passing `--reboot false` on the
+backup reads keeps the keyboard in ISP mode between them; only the write and
+the final readback reboot it. Pass the full backup to the patcher,
 using the actual path to the script:
 
 ```powershell
@@ -43,9 +45,9 @@ Only `patched.bin`, an application-only 61,440-byte file, is a flash payload.
 Never write the 65,536-byte full backup through the application-only command.
 
 ```powershell
-& $flasher write @device patched.bin
+& $flasher write @device --reboot true patched.bin
 # Stop if the command failed. Keep USB connected.
-& $flasher read @device --section full after-full.bin
+& $flasher read @device --reboot true --section full after-full.bin
 py C:\Path\To\gm840_patch.py verify before-full.bin patched.bin after-full.bin
 ```
 
@@ -65,8 +67,8 @@ Reconnect USB and select wired mode. Run the same application-only write,
 followed by independent readback:
 
 ```powershell
-& $flasher write @device restore-application.bin
-& $flasher read @device --section full restored-full.bin
+& $flasher write @device --reboot true restore-application.bin
+& $flasher read @device --reboot true --section full restored-full.bin
 py C:\Path\To\gm840_patch.py verify before-full.bin restore-application.bin restored-full.bin
 ```
 
