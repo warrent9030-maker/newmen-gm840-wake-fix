@@ -18,6 +18,10 @@ $patcherPath = Join-Path $PSScriptRoot 'gm840_patch.py'
 $pythonCommand = Get-Command py -ErrorAction SilentlyContinue
 if (-not $pythonCommand) { $pythonCommand = Get-Command python -ErrorAction Stop }
 $pythonPath = $pythonCommand.Source
+& $pythonPath -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    throw "Python 3.9 or newer is required, but '$pythonPath' could not provide it. Install Python 3.9+ and retry. Nothing was read or flashed."
+}
 $sessionDirectory = Join-Path $PSScriptRoot ('backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
 New-Item -ItemType Directory -Path $sessionDirectory | Out-Null
 $backupPath = Join-Path $sessionDirectory 'before-full.bin'
@@ -34,7 +38,7 @@ function Invoke-Flasher([string[]]$ToolArguments) {
 }
 function Invoke-Patcher([string[]]$ToolArguments) {
     & $pythonPath $patcherPath @ToolArguments
-    if ($LASTEXITCODE -ne 0) { throw 'Firmware validation failed. No further operation will run.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Firmware validation failed or the patcher could not run. See the error above. No further operation will run.' }
 }
 Write-Host 'Use a GM840 in wired mode (Fn+Tab held for 3 seconds, red Tab indicator). Keep USB connected.'
 Invoke-Flasher (@('read') + $deviceOptions + @('--section','full',$backupPath))

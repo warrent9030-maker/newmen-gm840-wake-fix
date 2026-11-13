@@ -1,3 +1,6 @@
+import contextlib
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -81,6 +84,59 @@ class PatcherTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 fw.write_new(target, b'replacement')
             self.assertEqual(target.read_bytes(), b'keep this')
+
+    def _run_cli(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = fw.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+    def test_cli_roundtrip_and_verify_report(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            backup = folder / 'backup.bin'
+            backup.write_bytes(self.full('3010'))
+            patched = folder / 'patched.bin'
+            code, out, _ = self._run_cli('inspect', str(backup))
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(out)['variant'], '3010')
+            code, out, _ = self._run_cli('patch', str(backup), str(patched), '--feature', 'wake')
+            self.assertEqual(code, 0)
+            self.assertEqual(patched.read_bytes(), self.images['wake'])
+            self.assertEqual(json.loads(out)['output_bytes'], fw.APP_SIZE)
+            # Re-running refuses to replace an existing output.
+            code, _, err = self._run_cli('patch', str(backup), str(patched), '--feature', 'wake')
+            self.assertEqual(code, 1)
+            self.assertIn('ERROR', err)
+            # extract-restore + verify through the CLI.
+            restore = folder / 'restore.bin'
+            self.assertEqual(self._run_cli('extract-restore', str(backup), str(restore))[0], 0)
+            self.assertEqual(restore.read_bytes(), self.images['3010'])
+            readback = folder / 'readback.bin'
+            readback.write_bytes(self.images['wake'] + self.boot)
+            code, out, _ = self._run_cli('verify', str(backup), str(patched), str(readback))
+            self.assertEqual(code, 0)
+            info = json.loads(out)
+            self.assertTrue(info['application_exact_match'])
+            self.assertTrue(info['bootloader_unchanged'])
+            self.assertEqual(info['variant'], '3010')
+
+    def test_cli_errors_exit_one_and_write_nothing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            bad = folder / 'bad.bin'
+            bad.write_bytes(b'not firmware')
+            output = folder / 'output.bin'
+            for argv in (['inspect', str(bad)],
+                         ['patch', str(bad), str(output)],
+                         ['extract-restore', str(bad), str(output)],
+                         ['inspect', str(folder / 'missing.bin')]):
+                with self.subTest(argv=argv):
+                    code, out, err = self._run_cli(*argv)
+                    self.assertEqual(code, 1)
+                    self.assertEqual(out, '')
+                    self.assertIn('ERROR', err)
+            self.assertFalse(output.exists())
 
     def test_overlay_assembles_to_reviewed_payload(self):
         self.assertEqual(assemble(), fw.BATTERY_CODE)
