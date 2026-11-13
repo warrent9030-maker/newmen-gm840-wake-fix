@@ -33,9 +33,10 @@ $logPath = Join-Path $sessionDirectory 'install.log'
 $deviceOptions = @('--platform','sh68f90','--vendor_id','0x12c9','--product_id','0x6004',
     '--firmware_size','61440','--bootloader_size','4096','--page_size','2048',
     '--isp_iface_num','1','--isp_report_id','5','--format','bin','--retry','2')
-# Backup reads keep the keyboard in ISP mode; only the write and final readback reboot it.
-$readOptions = $deviceOptions + @('--reboot','false')
-$flashOptions = $deviceOptions + @('--reboot','true')
+# The first backup read keeps the keyboard in ISP mode; every later device
+# step reboots, so even a prepare-only run ends with normal firmware running.
+$noRebootOptions = $deviceOptions + @('--reboot','false')
+$rebootOptions = $deviceOptions + @('--reboot','true')
 function Write-Transcript([scriptblock]$Call) {
     # Redirected native stderr becomes error records in Windows PowerShell 5.1;
     # Continue for the call so tool output reaches the transcript and console.
@@ -56,8 +57,8 @@ function Invoke-Patcher([string[]]$ToolArguments) {
     if ($LASTEXITCODE -ne 0) { throw 'Firmware validation failed or the patcher could not run. See the error above. No further operation will run.' }
 }
 Write-Host 'Use a GM840 in wired mode (Fn+Tab held for 3 seconds, red Tab indicator). Keep USB connected.'
-Invoke-Flasher (@('read') + $readOptions + @('--section','full',$backupPath))
-Invoke-Flasher (@('read') + $readOptions + @('--section','full',$secondBackupPath))
+Invoke-Flasher (@('read') + $noRebootOptions + @('--section','full',$backupPath))
+Invoke-Flasher (@('read') + $rebootOptions + @('--section','full',$secondBackupPath))
 if ((Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $secondBackupPath -Algorithm SHA256).Hash) {
     throw 'The two backups differ. Both are retained; nothing will be flashed.'
 }
@@ -69,7 +70,7 @@ if (-not $Flash) {
     Write-Host 'Preparation complete. Firmware has not been flashed. Run with -Flash when ready to install.'
     return
 }
-Invoke-Flasher (@('write') + $flashOptions + @($patchedPath))
-Invoke-Flasher (@('read') + $flashOptions + @('--section','full',$readbackPath))
+Invoke-Flasher (@('write') + $rebootOptions + @($patchedPath))
+Invoke-Flasher (@('read') + $rebootOptions + @('--section','full',$readbackPath))
 Invoke-Patcher -ToolArguments @('verify',$backupPath,$patchedPath,$readbackPath)
 Write-Host 'Installation and exact readback verified. Test normal wired typing, then Bluetooth idle/wake.'

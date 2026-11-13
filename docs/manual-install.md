@@ -20,13 +20,13 @@ Do not reuse a backup filename: the upstream flasher can overwrite files.
 ```powershell
 & $flasher read @device --reboot false --section full before-full.bin
 # Stop if the command failed.
-& $flasher read @device --reboot false --section full before-full-verify.bin
+& $flasher read @device --reboot true --section full before-full-verify.bin
 Get-FileHash before-full.bin, before-full-verify.bin -Algorithm SHA256
 ```
 
-Both hashes must match. Retain both files. Passing `--reboot false` on the
-backup reads keeps the keyboard in ISP mode between them; only the write and
-the final readback reboot it. Pass the full backup to the patcher,
+Both hashes must match. Retain both files. `--reboot false` on the first
+read keeps the keyboard in ISP mode between the two reads; the second read
+reboots it, so stopping here still leaves normal firmware running. Pass the full backup to the patcher,
 using the actual path to the script:
 
 ```powershell

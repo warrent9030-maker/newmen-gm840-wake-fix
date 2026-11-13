@@ -153,10 +153,13 @@ class PatcherTests(unittest.TestCase):
                     '--page_size', '2048', '--isp_iface_num', '1', '--isp_report_id', '5',
                     '--format', 'bin', '--retry', '2']
         self.assertEqual(options, expected)
-        # Only the write and the post-install readback reboot the device.
-        self.assertEqual(script.count("$readOptions + @('--section','full'"), 2)
-        self.assertIn("@('write') + $flashOptions", script)
-        self.assertIn("@('read') + $flashOptions + @('--section','full',$readbackPath)", script)
+        # Only the first backup read skips the reboot; every later device
+        # step reboots so a prepare-only run leaves normal firmware running.
+        self.assertEqual(script.count("$noRebootOptions + @('"), 1)
+        self.assertIn("@('read') + $noRebootOptions + @('--section','full',$backupPath)", script)
+        self.assertIn("@('read') + $rebootOptions + @('--section','full',$secondBackupPath)", script)
+        self.assertIn("@('write') + $rebootOptions", script)
+        self.assertIn("@('read') + $rebootOptions + @('--section','full',$readbackPath)", script)
         for token in ('12c9:6004', '61,440', '4,096', '1 / 5', '2,048'):
             self.assertIn(token, readme)
 
